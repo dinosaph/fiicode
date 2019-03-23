@@ -11,18 +11,23 @@ SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 500
 spritesCollection = pygame.sprite.Group()
 miscSprites = pygame.sprite.Group()
+transitionSprites = pygame.sprite.Group()
 GAME_STATE = { "holdingBear" : False, "safeToLoad" : False, "loadedBear" : False, "loading" : False, "loadingUp" : False, "launching" : False, "flying" : False}
 spritesStates = {}
 screen = []
-RUNNING = True
+RUNNING, IN_SCENE, TELEPORTING = (True, True, False)
+CURRENT_SCENE = 0
 THROW_POWER, CURRENT_POWER, MAX_POWER = (0, 0, 300)
 
 def preparePlayground():
-    global spritesCollection, spritesStates
+    global spritesCollection, spritesStates, transitionSprites
 
     spritesStates["scene"] = ["scene.png"]
     bg = act.gameObj(spritesStates["scene"][0])
     spritesCollection.add(bg)
+
+    tr = act.gameObj("transition.png")
+    transitionSprites.add(tr)
 
 
 def prepareCatapult():
@@ -48,7 +53,7 @@ def changeCatapult(img_file):
 def prepareLilBear():
     global spritesCollection, spritesStates
 
-    spritesStates["lilBear"] = ["lilbear.png", "lilbear_hangin.png", "lilbear_zzz.png"]
+    spritesStates["lilBear"] = ["lilbear.png", "lilbear_hangin.png", "lilbear_zzz.png", "lilbear_flying.png"]
     # lilBearWidth, lilBearHeight = ()
     lilBearInitialX, lilBearInitialY = (100, 300)
     lilBear = act.gameObj("lilbear.png")
@@ -79,10 +84,15 @@ def gameInit():
     preparePressureBar()
 
 def startGame():
-    global RUNNING
+    global RUNNING, CURRENT_SCENE
 
     while RUNNING:
-        playGame()
+        resetScene()
+        while IN_SCENE:
+            playScene(CURRENT_SCENE)
+        while TELEPORTING:
+            # print("here")
+            doTransition()
 
 def loadPressureBar(color = (255, 0, 0)):
     global miscSprites, spritesCollection, THROW_POWER, CURRENT_POWER, GAME_STATE, MAX_POWER
@@ -121,9 +131,32 @@ def refreshScreen():
     spritesCollection.draw(screen)
     pygame.display.flip()
 
-def playGame():
-    global RUNNING, screen, miscSprites ,spritesCollection, spritesStates, GAME_STATE, THROW_POWER
+def refreshScreenTransition():
+    global transitionSprites, screen
 
+    transitionSprites.update()
+    transitionSprites.draw(screen)
+    pygame.display.flip()
+
+def resetScene():
+    global GAME_STATE, IN_SCENE, spritesCollection, spritesStates
+
+    IN_SCENE = True
+    changeCatapult(spritesStates["catapult"][0])
+
+    GAME_STATE["holdingBear"] = False
+    GAME_STATE["safeToLoad"] = False
+    GAME_STATE["loadedBear"] = False
+    GAME_STATE["loading"] = False
+    GAME_STATE["loadingUp"] = False
+    GAME_STATE["launching"] = False
+    GAME_STATE["flying"] = False
+
+def playScene(sceneNumber):
+    global RUNNING, IN_SCENE, TELEPORTING, screen, miscSprites, spritesCollection, spritesStates, GAME_STATE, THROW_POWER
+
+    scene = spritesCollection.sprites()[0]
+    scene.changeState(spritesStates["scene"][sceneNumber])
     catapult = spritesCollection.sprites()[1]
     bear = spritesCollection.sprites()[2]
     pressureBar = miscSprites.sprites()[0]
@@ -131,6 +164,7 @@ def playGame():
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             RUNNING = False
+            IN_SCENE = False
         if pygame.mouse.get_pressed()[0]:
             if bear.rect.collidepoint(event.pos):
                 GAME_STATE["holdingBear"] = True
@@ -148,7 +182,7 @@ def playGame():
         else:
             GAME_STATE["loading"] = False
     
-    if not GAME_STATE["flying"] :
+    if not GAME_STATE["flying"]:
         if GAME_STATE["holdingBear"]:
             bear.changeState(spritesStates["lilBear"][1])
             mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -182,9 +216,36 @@ def playGame():
                     GAME_STATE["launching"] = False
                     GAME_STATE["flying"] = True
     else:
-        bear.rect.x += 10
+        if bear.rect.colliderect(scene):
+            bear.rect.x += 10
+        else:
+            CURRENT_SCENE = 0
+            # print("leaving scene")
+            bear.rect.x, bear.rect.y = (-10, 150)
+            IN_SCENE = False
+            TELEPORTING = True
 
     refreshScreen()
+
+def doTransition():
+    global spritesCollection, transitionSprites, TELEPORTING
+
+    scene = transitionSprites.sprites()[0]
+    bear = spritesCollection.sprites()[2]
+    transitionSprites.add(bear)
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            TELEPORTING = False
+
+    if bear.rect.colliderect(scene):
+        bear.changeState(spritesStates["lilBear"][3])
+        bear.rect.x += 1
+    else:
+        TELEPORTING = False
+
+    refreshScreenTransition()
+
 
 def main():
     os.environ['SDL_VIDEO_CENTERED'] = '1'

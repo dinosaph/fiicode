@@ -5,11 +5,15 @@ class gameObj(pygame.sprite.Sprite):
         super().__init__()
         self.image = pygame.image.load(os.path.join("images", img_file))
         self.rect = self.image.get_rect()
+        self.rotation = 0
     def changeState(self, img_file):
         self.image = pygame.image.load(os.path.join("images", img_file))
         # self.rect = self.image.get_rect()
     def resizeImg(self, new_width, new_height):
         self.image = pygame.transform.scale(self.image, (new_width, new_width))
+    def rotate(self, angle):
+        self.rotation += angle
+        self.image = pygame.transform.rotate(self.image, self.rotation)
 
 class miscBlock(pygame.sprite.Sprite):
     def __init__(self, color, width, height):
