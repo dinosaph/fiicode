@@ -5,8 +5,6 @@
 #IMPORTS
 import random, math
 import os, pygame
-import pygameMenu
-from pygameMenu.locals import *
 import gameActors as act
 
 ## GLOBALS #########################################################
@@ -19,6 +17,9 @@ miscSprites = pygame.sprite.Group()
 transitionSprites = pygame.sprite.Group()
 storySprites = pygame.sprite.Group()
 storyMiscs = pygame.sprite.Group()
+creditsSprite = pygame.sprite.Group()
+convoSprites = pygame.sprite.Group()
+convoDraft = pygame.sprite.Group()
 
 GAME_STATE = { "holdingBear" : False, "safeToLoad" : False, "loadedBear" : False, "loading" : False, "loadingUp" : False, "launching" : False, "flying" : False, "intended" : False}
 spritesStates = {}
@@ -27,6 +28,8 @@ screen = []
 SOUNDS = []
 RUNNING, IN_SCENE, TELEPORTING, SKIP = (True, True, False, False)
 
+SUN_DEFEATED = False
+FINAL = False
 INTRO = True
 CURRENT_SCENE = 0
 CURRENT_POS = 100
@@ -38,21 +41,28 @@ CURRENT_SUN_SCENE = -1
 ACTUAL_SUN_X = -200
 
 CURRENT_STORY_FRAME = 0
+CURRENT_TALK = 0
+READY_CONVO = False
+BEARS_MET = False
+CAN_TALK = False
 
-MAX_SCENES = 2
+MAX_SCENES = 9
 
-THROW_POWER, CURRENT_POWER, MAX_POWER = (0, 0, 700)
+THROW_POWER, CURRENT_POWER, MAX_POWER = (0, 0, 300)
 ####################################################################
 
 ## INTRO PREP ######################################################
 def prepareIntro():
-    global storySprites, spritesStates
+    global storySprites, spritesStates, creditsSprite
 
-    spritesStates["story"] = ["intro1.png", "story2.png", "story3.png", "story4.png", "story5.png", "story6.png", "story7.png", "story8.png", "story9.png", "menu.png"]
+    spritesStates["story"] = ["intro.png", "story2.png", "story3.png", "story4.png", "story5.png", "story6.png", "story7.png", "story8.png", "story9.png", "story10.png", "menu.png"]
     slide = act.gameObj(spritesStates["story"][0])
     skip = act.gameObj("skip.png")
     storySprites.add(slide)
     storyMiscs.add(skip)
+
+    credits = act.gameObj("credits.png")
+    creditsSprite.add(credits)
 
 ## INTRO SCREEN REFRESH ############################################
 def refreshStory():
@@ -76,7 +86,7 @@ def playStory():
         if event.type == pygame.QUIT:
             RUNNING = False
             SKIP = True
-        if pygame.key.get_pressed()[pygame.K_ESCAPE]:
+        if pygame.key.get_pressed()[pygame.K_RETURN]:
             SKIP = True
 
     if SKIP:
@@ -84,17 +94,27 @@ def playStory():
         pygame.mixer.music.load(os.path.join("sounds", "ingame.mp3"))
         pygame.mixer.music.play(-1)
     else:
-        if CURRENT_STORY_FRAME == len(spritesStates["story"]):
-            storySprites.add(storyMiscs.sprites()[0])
         refreshStory()
-        pygame.time.wait(4000)
+        pygame.time.wait(3000)
+
+## INGAME PREPS ####################################################
+def loadCredits():
+    global screen, creditsSprite, RUNNING
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            RUNNING = False
+
+    creditsSprite.update()
+    creditsSprite.draw(screen)
+    pygame.display.flip()
 
 ## INGAME PREPS ####################################################
 def preparePlayground():
     global spritesCollection, spritesStates, transitionSprites
     global miscSprites, CURRENT_SUN_POS, sunMovement
 
-    spritesStates["scene"] = ["scene.png", "scene.png", "scene.png", "scene.png", "scene.png", "scene.png"]
+    spritesStates["scene"] = ["scene.png", "scene.png", "scene.png", "scene.png", "scene.png", "scene.png", "scene.png", "scene.png", "scene.png", "scene.png"]
 
     bg = act.gameObj(spritesStates["scene"][0])
 
@@ -110,7 +130,7 @@ def prepareSunIce():
     global CURRENT_SUN_POS, sunMovement
 
     spritesStates["sun"] = ["sun.png"]
-    spritesStates["ice"] = ["ice.png"]
+    spritesStates["ice"] = ["ice.png", "tip_load_catapult.png", "tip_throw.png", "tip_wait_sun.png", "tip_fight_sun.png"]
 
     sun = act.gameObj(spritesStates["sun"][0])
     ice = act.gameObj(spritesStates["ice"][0])
@@ -192,7 +212,7 @@ def prepareBears():
 
 ## ACTORS PREP #####################################################
 def prepareActors():
-    global miscSprites, ACTOR
+    global miscSprites, ACTOR, sunMovement
     ACTOR["sun"] = miscSprites.sprites()[0]
     ACTOR["bros"] = miscSprites.sprites()[1]
     ACTOR["distance"] = miscSprites.sprites()[2]
@@ -202,6 +222,50 @@ def prepareActors():
     ACTOR["pressure_bar"] = miscSprites.sprites()[6]
     ACTOR["momma"] = miscSprites.sprites()[7]
     ACTOR["bear"] = miscSprites.sprites()[8]
+    ACTOR["ice"] = sunMovement.sprites()[2]
+
+## CONVO PREP ######################################################
+def prepareConvo():
+    global convoSprites, spritesStates, convoDraft
+
+    spritesStates["convo"] = ["chat1.png", "chat2.png", "chat3.png", "chat4.png", "chat5.png", "chat6.png", "chat7.png", "chat8.png"]
+    chat = act.gameObj(spritesStates["convo"][0])
+    chatInitialX, chatInitialY = (100, 400)
+    chat.rect.x, chat.rect.y = (chatInitialX, chatInitialY)
+
+    finalChat = act.gameObj("chat9.png")
+    chatFInitialX, chatFInitialY = (350, 150)
+    finalChat.rect.x, finalChat.rect.y = (chatFInitialX, chatFInitialY)
+
+    convoDraft.add(chat, finalChat)
+    # convoSprites.add(chat)
+
+## CONVO UPDATE ####################################################
+def updateConvo():
+    global CURRENT_SCENE, spritesStates, convoSprites, convoDraft
+    global MAX_SCENES, CURRENT_TALK, TELEPORTING, READY_CONVO
+    global SUN_DEFEATED, CAN_TALK
+
+    chat = convoDraft.sprites()[0]
+    final = convoDraft.sprites()[1]
+
+    if READY_CONVO:
+        if not SUN_DEFEATED:
+            if CURRENT_SCENE == MAX_SCENES and not TELEPORTING:
+                if CURRENT_TALK == 0:
+                    convoSprites.add(chat)
+                chat.changeState(spritesStates["convo"][min(7, CURRENT_TALK)])
+                CURRENT_TALK = min(8, CURRENT_TALK + 1)
+                # print(CURRENT_TALK)
+                if CURRENT_TALK == 8:
+                    READY_CONVO = False
+                    CAN_TALK = True
+        else:
+            if len(convoSprites.sprites()) == 1:
+                convoSprites.remove(chat)
+            convoSprites.add(final)
+    elif CURRENT_TALK > 0 and len(convoSprites.sprites()) == 1:
+        convoSprites.remove(chat)
 
 ## CATAPULT UPDATE #################################################
 def changeCatapult(img_file):
@@ -234,7 +298,7 @@ def loadPressureBar(color = (255, 0, 0)):
     spritesCollection.add(pressureBar)
 
     THROW_POWER += 1
-    CURRENT_POWER = min(70, int(THROW_POWER)) * 20
+    CURRENT_POWER = min(30, int(THROW_POWER)) * 10
 
     # print(THROW_POWER)
     if CURRENT_POWER < MAX_POWER :
@@ -267,12 +331,18 @@ def loadSunHp():
 
 ## INGAME SCREEN REFRESH ###########################################
 def refreshScreen():
-    global spritesCollection, screen, sunMovement
+    global spritesCollection, screen, sunMovement, convoSprites
+    global CURRENT_SCENE, MAX_SCENES, TELEPORTING, CAN_TALK, TELEPORTING
+    global CURRENT_TALK, READY_CONVO
 
     sunMovement.update()
     spritesCollection.update()
     sunMovement.draw(screen)
     spritesCollection.draw(screen)
+    convoSprites.update()
+    convoSprites.draw(screen)
+    if CURRENT_TALK > 0 and READY_CONVO:
+        pygame.time.wait(3500)
     pygame.display.flip()
 
 ## TRANSITION SCREEN REFRESH #######################################
@@ -325,6 +395,7 @@ def playScene(sceneNumber):
     bear = ACTOR["bear"]
     pressureBar = ACTOR["pressure_bar"]
     sun = ACTOR["sun"]
+    ice = ACTOR["ice"]
 
     if GAME_STATE["loading"]:
         CURRENT_POS = CURRENT_POWER
@@ -341,7 +412,7 @@ def playScene(sceneNumber):
         if event.type == pygame.QUIT:
             RUNNING = False
             IN_SCENE = False
-        if pygame.mouse.get_pressed()[0]:
+        if pygame.mouse.get_pressed()[0] and not GAME_STATE["loadedBear"]:
             mouse_x, mouse_y = pygame.mouse.get_pos()
             if bear.rect.collidepoint((mouse_x, mouse_y)):
                 GAME_STATE["holdingBear"] = True
@@ -371,6 +442,8 @@ def playScene(sceneNumber):
             if not bear.rect.colliderect(catapult):
                 bear.changeState(spritesStates["lilBear"][0])
                 bear.rect.x, bear.rect.y = (defaultLilbearX, defaultLilbearY)
+                ice.changeState(spritesStates["ice"][1])
+                removePressureBar()
             if GAME_STATE["safeToLoad"] and not GAME_STATE["launching"]:
                 bear.rect.x, bear.rect.y = (lilbearLoadedX, lilbearLoadedY)
                 bear.changeState(spritesStates["lilBear"][2])
@@ -378,10 +451,12 @@ def playScene(sceneNumber):
                 GAME_STATE["safeToLoad"] = False
             elif GAME_STATE["loadedBear"]:
                 loadPressureBar()
+                ice.changeState(spritesStates["ice"][2])
             elif GAME_STATE["loading"]:
                 loadPressureBar((0, 255,0))
                 changeCatapult(spritesStates["catapult"][1])
                 bear.rect.y = chargedLilbearY
+                ice.changeState(spritesStates["ice"][2])
             else:
                 if not GAME_STATE["launching"]:
                     bear.changeState(spritesStates["lilBear"][0])
@@ -406,11 +481,13 @@ def playScene(sceneNumber):
             CURRENT_SCENE = min(MAX_SCENES, int((((CURRENT_SCENE + 1) * 1000) + lilbearLoadedX + defaultLilbearX + CURRENT_POWER) / 1000))
             # print(lilbearLoadedX, defaultLilbearX, CURRENT_POWER)
             # print("Scene: ", CURRENT_SCENE)
+            ice.changeState(spritesStates["ice"][0])
             bear.rect.x, bear.rect.y = (lilbearTranX, lilbearTranY)
             IN_SCENE = False
             TELEPORTING = True
             pygame.time.wait(1500)
 
+    updateConvo()
     updateSun()
     refreshScreen()
 
@@ -424,25 +501,26 @@ def updateSun():
     sun = ACTOR["sun"]
     sunDist = ACTOR["sunDist"]
     bear = ACTOR["bear"]
+    sunR = 1
 
     # print("Bear current x: ", bear.rect.x)
     if CURRENT_SUN_SCENE == CURRENT_SCENE:
         sunMovement.add(sun)
-        if sun.rect.x < bear.rect.x - 100:
-            CURRENT_SUN_POS += 1
-        elif sun.rect.x > bear.rect.x - 100:
-            CURRENT_SUN_POS -= 1
+        if sun.rect.x < bear.rect.x - 50:
+            CURRENT_SUN_POS += sunR
+        elif sun.rect.x > bear.rect.x - 50:
+            CURRENT_SUN_POS -= sunR
     else:
         sunMovement.remove(sun)
         if CURRENT_SUN_POS < 0:
-            CURRENT_SUN_POS += 1
+            CURRENT_SUN_POS += sunR
             if CURRENT_SUN_POS == 0:
-                CURRENT_SUN_SCENE += 1
-        elif CURRENT_SUN_POS < 990:
-                CURRENT_SUN_POS += 1
+                CURRENT_SUN_SCENE += sunR
+        elif CURRENT_SUN_POS < 200:
+                CURRENT_SUN_POS += sunR
         else:
             CURRENT_SUN_POS = -10
-            CURRENT_SUN_SCENE += 1
+            CURRENT_SUN_SCENE += sunR
 
     sun.rect.x = CURRENT_SUN_POS
 
@@ -456,8 +534,8 @@ def heartFest():
     global spritesCollection
 
     heart = act.gameObj("heart.png")
-    heartX = random.randint(200, 990)
-    heartY = random.randint(10, 490)
+    heartX = random.randint(500, 990)
+    heartY = random.randint(100, 400)
     heart.rect.x, heart.rect.y = (heartX, heartY)
     spritesCollection.add(heart)
 
@@ -465,36 +543,68 @@ def heartFest():
 def playLastScene():
     global IN_SCENE, spritesCollection, spritesStates, RUNNING, ACTOR
     global SUN_HP, SUN_UP, CURRENT_SCENE, CURRENT_SUN_SCENE, SOUNDS
+    global SUN_DEFEATED, FINAL, READY_CONVO, BEARS_MET, CURRENT_TALK
+    global CAN_TALK
 
     bear = ACTOR["bear"]
     momma = ACTOR["momma"]
     sun = ACTOR["sun"]
+    sunHp = ACTOR["sun_hp"]
+    ice = ACTOR["ice"]
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             RUNNING = False
             IN_SCENE = False
-        if SUN_UP and bear.rect.colliderect(momma) and pygame.key.get_pressed()[pygame.K_SPACE]:
+        if not READY_CONVO and BEARS_MET and pygame.key.get_pressed()[pygame.K_SPACE]:
             heartFest()
             SOUNDS[1].play()
-            SUN_HP = max(10, SUN_HP - 10)
             sun.rect.y -= 10
+            SUN_HP = max(0, SUN_HP - 10)
+            if SUN_HP == 0:
+                ice.changeState(spritesStates["ice"][0])
+                spritesCollection.remove(sunHp)
+                SUN_DEFEATED = True
+                sun.rect.y -= 50
+                pygame.time.wait(1000)
 
     if not bear.rect.colliderect(momma):
         bear.rect.x += 2
     else:
         bear.changeState(spritesStates["lilBear"][0])
         bear.rect.y = 320
-        if len(spritesCollection.sprites()) > 5:
-            for heart in spritesCollection.sprites()[5:]:
-                heart.rect.y -= 1
-                if heart.rect.y < 0:
-                    spritesCollection.remove(heart)
-        if (sun.rect.x + 100 == bear.rect.x or 
-            sun.rect.x + 100 == momma.rect.x) and (CURRENT_SCENE == CURRENT_SUN_SCENE):
-            SUN_UP = True
-            loadSunHp()
+        BEARS_MET = True
 
+    if CURRENT_TALK == 0:
+        if not SUN_UP:
+            ice.changeState(spritesStates["ice"][3])
+            if (sun.rect.x + 50 == bear.rect.x) and (CURRENT_SCENE == CURRENT_SUN_SCENE):
+                SUN_UP = True
+        else:
+            ice.changeState(spritesStates["ice"][0])
+            READY_CONVO = True
+    elif CAN_TALK:
+        if not READY_CONVO:
+            ice.changeState(spritesStates["ice"][4])
+            loadSunHp()
+            # print(len(spritesCollection.sprites()))
+            if len(spritesCollection.sprites()) > 5:
+                for heart in spritesCollection.sprites()[5:]:
+                    heart.rect.y -= 10
+                    if heart.rect.y < 0:
+                        spritesCollection.remove(heart)
+            if SUN_DEFEATED:
+                READY_CONVO = True
+                ice.changeState(spritesStates["ice"][0])
+        else:
+            ice.changeState(spritesStates["ice"][0])
+            for heart in spritesCollection.sprites()[5:]:
+                spritesCollection.remove(heart)
+            pygame.time.wait(3000)
+            FINAL = True
+            IN_SCENE = False
+
+    updateConvo()
     updateSun()
     refreshScreen()
 
@@ -538,13 +648,11 @@ def gameInit():
     prepareBears()
     prepareSounds()
     prepareActors()
+    prepareConvo()
 
 ## MAIN GAME LOOP ##################################################
 def startGame():
-    global RUNNING, CURRENT_SCENE, MAX_SCENES, SKIP, INTRO, CURRENT_SUN_POS, miscSprites
-
-    # menuWindow = pygame.image.load(os.path.join("images", "scene.png"))
-    # menu = pygameMenu.Menu(menuWindow, 100, 100, font="8BIT", title="MENU", bgfun=None)
+    global RUNNING, CURRENT_SCENE, MAX_SCENES, SKIP, INTRO, CURRENT_SUN_POS, miscSprites, FINAL
 
     if not INTRO:
         pygame.mixer.music.play(-1)
@@ -552,21 +660,21 @@ def startGame():
         pygame.mixer.music.play()
 
     while RUNNING:
-        # events = pygame.event.get()
-        if INTRO:
-            while not SKIP:
-                playStory()
-        resetScene()
-        while IN_SCENE:
-            if CURRENT_SCENE < MAX_SCENES:
-                playScene(CURRENT_SCENE)
-            else:
-                playLastScene()
-        while TELEPORTING:
-            # print("here")
-            doTransition()
+        if FINAL:
+            loadCredits()
+        else:
+            if INTRO:
+                while not SKIP:
+                    playStory()
+            resetScene()
+            while IN_SCENE:
+                if CURRENT_SCENE < MAX_SCENES:
+                    playScene(CURRENT_SCENE)
+                else:
+                    playLastScene()
+            while TELEPORTING:
+                doTransition()
 
-        # menu.mainloop(events)
     pygame.mixer.music.stop()
 
 def main():
