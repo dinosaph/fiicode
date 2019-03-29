@@ -7,7 +7,7 @@ Team --- owo (Tidepods)
 FiiCode 2019 - Game Development section
 
 Help:
-* The repo contains a video [presentation](https://github.com/dinosaph/fiicode/blob/master/I_Have_Time_PRESENTATION.mp4) of the game.
+* The repo contains a video [playthrough](https://github.com/dinosaph/fiicode/blob/master/I_Have_Time_PRESENTATION.mp4) of the game.
 * Bla bla bla bla
 
 Sneak peeks of the game:
