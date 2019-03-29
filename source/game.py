@@ -1,5 +1,5 @@
-#FIICODE - Team owo
-#Author: Oica Andra-Maria (dinosaph)
+#FIICODE - Team owo (also known as Tidepods)
+#Author: Oica Andra-Maria, Bigu Mihnea
 #Faculty of Computer Science, UAIC, Iasi
 
 #IMPORTS
@@ -48,7 +48,7 @@ CAN_TALK = False
 
 MAX_SCENES = 9
 
-THROW_POWER, CURRENT_POWER, MAX_POWER = (0, 0, 300)
+THROW_POWER, CURRENT_POWER, MAX_POWER = (0, 0, 700)
 ####################################################################
 
 ## INTRO PREP ######################################################
@@ -230,7 +230,7 @@ def prepareConvo():
 
     spritesStates["convo"] = ["chat1.png", "chat2.png", "chat3.png", "chat4.png", "chat5.png", "chat6.png", "chat7.png", "chat8.png"]
     chat = act.gameObj(spritesStates["convo"][0])
-    chatInitialX, chatInitialY = (100, 400)
+    chatInitialX, chatInitialY = (50, 150)
     chat.rect.x, chat.rect.y = (chatInitialX, chatInitialY)
 
     finalChat = act.gameObj("chat9.png")
@@ -253,18 +253,22 @@ def updateConvo():
         if not SUN_DEFEATED:
             if CURRENT_SCENE == MAX_SCENES and not TELEPORTING:
                 if CURRENT_TALK == 0:
+                    CURRENT_TALK += 1
                     convoSprites.add(chat)
-                chat.changeState(spritesStates["convo"][min(7, CURRENT_TALK)])
-                CURRENT_TALK = min(8, CURRENT_TALK + 1)
-                # print(CURRENT_TALK)
-                if CURRENT_TALK == 8:
-                    READY_CONVO = False
-                    CAN_TALK = True
+                else:
+                    if CURRENT_TALK == 8:
+                        READY_CONVO = False
+                        CAN_TALK = True
+                    else:
+                        chat.changeState(spritesStates["convo"][CURRENT_TALK])
+                        CURRENT_TALK = min(8, CURRENT_TALK + 1)
         else:
             if len(convoSprites.sprites()) == 1:
                 convoSprites.remove(chat)
             convoSprites.add(final)
-    elif CURRENT_TALK > 0 and len(convoSprites.sprites()) == 1:
+    # else:
+    #     convoSprites.remove(chat)
+    elif CURRENT_TALK > 0 and CURRENT_TALK < 8:
         convoSprites.remove(chat)
 
 ## CATAPULT UPDATE #################################################
@@ -298,7 +302,7 @@ def loadPressureBar(color = (255, 0, 0)):
     spritesCollection.add(pressureBar)
 
     THROW_POWER += 1
-    CURRENT_POWER = min(30, int(THROW_POWER)) * 10
+    CURRENT_POWER = min(70, int(THROW_POWER)) * 20
 
     # print(THROW_POWER)
     if CURRENT_POWER < MAX_POWER :
