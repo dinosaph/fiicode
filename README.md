@@ -21,3 +21,7 @@ Sneak peeks of the game:
 [ss1]: https://github.com/dinosaph/fiicode/blob/master/sneak_peek1.png "Game Intro"
 [ss2]: https://github.com/dinosaph/fiicode/blob/master/sneak_peek2.png "In Game"
 [ss3]: https://github.com/dinosaph/fiicode/blob/master/sneak_peek3.png "Final Meet"
+
+---
+
+Copyright © dinosaph 2019
